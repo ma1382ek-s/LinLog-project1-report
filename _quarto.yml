@@ -1,5 +1,2 @@
 project:
-  title: "Project1-report"
-
-editor: visual
-
+  type: default

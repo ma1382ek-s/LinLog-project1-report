@@ -1,11 +1,227 @@
 ---
-title: "Project1-report"
+project:
+  title: "Project 1 - Linear Regression on Plasma β-carotene and Personal Factors"
+author: 
+  - name: "Mattis Ranheim"
+    affiliation: "Lund University"
+    email: "ranheim.mattis@gmail.com"
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    fig-cap-location: bottom
+    keep-tex: false
+    link-citations: true
+    mainfont: "Palatino" 
+execute:
+  echo: false 
+  warning: false
+  message: false
+
+editor: visual
 ---
 
-## Quarto
+# Project 1 - Report: Linear Regression
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+## Use of AI Tools
+
+AI tools were used to assist in writing and coding: - **ChatGPT (OpenAI)** was used to clarify statistical concepts, draft parts of code, and suggest text structure. - All code was reviewed, understood, and adapted by the author. - Output was carefully verified for correctness.
+
+Spelling and grammar suggestions from **RStudio Visual Editor** were used.
+
+------------------------------------------------------------------------
+
+## Author Contributions
+
+| Name | Roles |
+|----|----|
+| Mattis Ranheim | Derivations, Analysis, Discussions, Programming, Visualisation, Writing (original draft), Writing (revision & editing), Project Management |
+
+# Introduction
+
+Numerous observational studies have suggested that low dietary intake or low plasma concentrations of β-carotene and other carotenoids may be linked to an increased risk of developing certain types of cancer. However, relatively few studies have examined which factors actually influence plasma concentrations of these micronutrients.
+
+In this project, we analyze data from a cross-sectional study conducted by Nierenberg et al. (1989), where the goal was to investigate the relationship between **personal characteristics**, **dietary intake**, and **plasma concentrations of β-carotene**. The study population consisted of 315 patients who underwent elective surgical procedures to biopsy or remove benign (non-cancerous) lesions in organs such as the lung, colon, breast, skin, ovary, or uterus. For this analysis, we focus exclusively on **plasma β-carotene concentrations** as the outcome of interest.
+
+The study highlights considerable individual variation in plasma β-carotene levels and suggests that much of this variability may be explained by lifestyle and dietary factors.
+
+# Data Description
+
+The dataset used in this project contains **315 observations** and **12 variables**, stored in the file `carotene.xlsx`. Each row corresponds to an individual patient from the study. The variables are described below:
+
+| Variable | Description |
+|----|----|
+| `age` | Age (years) |
+| `sex` | Sex (1 = Male, 2 = Female) |
+| `smokstat` | Smoking status (1 = Never, 2 = Former, 3 = Current) |
+| `bmi` | Body mass index (BMI = weight/height², kg/m²) |
+| `vituse` | Vitamin use (1 = Yes, fairly often, 2 = Yes, not often, 3 = No) |
+| `calories` | Daily calorie intake (MJ) |
+| `fat` | Fat consumed per day (g) |
+| `fiber` | Fiber consumed per day (g) |
+| `alcohol` | Alcoholic drinks per week |
+| `cholesterol` | Daily cholesterol intake (mg) |
+| `betadiet` | Dietary β-carotene intake per day (mg) |
+| `betaplasma` | **Plasma β-carotene concentration (ng/ml)** — this is the **response variable** we aim to model |
+
+Our objective is to model how `betaplasma` varies as a function of the other variables using a **linear regression model** of the form:
+
+$$
+Y_i = \mathbf{x}_i \boldsymbol{\beta} + \varepsilon_i
+$$
+
+where $Y_i$ is the plasma β-carotene concentration for individual $i$, $\mathbf{x}_i$ is the vector of explanatory variables, $\boldsymbol{\beta}$ is the vector of unknown regression coefficients, and $\varepsilon_i \sim \mathcal{N}(0, \sigma^2)$ are the error terms.
+
+To satisfy the linear model assumptions (e.g., normality and homoscedasticity of residuals), we may need to apply **suitable transformations** to the response and/or predictor variables throughout the analysis.
+
+## Testing Model Assumptions: Linear vs Log-transformed
+
+We fitted two models to examine the relationship between BMI and plasma β-carotene levels:
+
+-   **Linear model**: `betaplasma ~ bmi`
+-   **Log-transformed model**: `log(betaplasma) ~ bmi`
+
+The aim is to assess whether a log-transformation of the outcome variable improves model fit and better satisfies the assumptions of linear regression — particularly **normality of residuals** and **constant variance (homoscedasticity)**.
+
+Below, we compare the two models using **residual plots** and **Q-Q plots** for both. A good model should show no patterns in the residuals vs fitted plot, and the residuals should lie close to the theoretical line in the Q-Q plot.
+
+These graphs show the residual and QQ-plots for the **Linear** and log-trans
 
 ```{r}
-1 + 1
+#Loading the data
+library(readxl)
+data <- read_excel("data/carotene.xlsx") 
 ```
+
+```{r}
+# Linear model (no transformation)
+model_lin <- lm(betaplasma ~ bmi, data = data)
+
+# Log-transformed model
+model_log <- lm(log(betaplasma) ~ bmi, data = data)
+```
+
+```{r}
+
+library(ggplot2)
+library(patchwork)
+
+# Residuals
+data$res_lin <- resid(model_lin)
+data$res_log <- resid(model_log)
+data$fit_lin <- fitted(model_lin)
+data$fit_log <- fitted(model_log)
+
+# Linear model plots
+p1 <- ggplot(data, aes(x = fit_lin, y = res_lin)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Residuals vs Fitted (Linear)", x = "Fitted", y = "Residuals") +
+  theme_minimal()
+
+p2 <- ggplot(data, aes(sample = res_lin)) +
+  stat_qq() +
+  stat_qq_line(color = "red") +
+  labs(title = "Q-Q Plot (Linear)", x = "Theoretical", y = "Sample Quantiles") +
+  theme_minimal()
+
+# Log model plots
+p3 <- ggplot(data, aes(x = fit_log, y = res_log)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "blue") +
+  labs(title = "Residuals vs Fitted (Log)", x = "Fitted", y = "Residuals") +
+  theme_minimal()
+
+p4 <- ggplot(data, aes(sample = res_log)) +
+  stat_qq() +
+  stat_qq_line(color = "blue") +
+  labs(title = "Q-Q Plot (Log)", x = "Theoretical", y = "Sample Quantiles") +
+  theme_minimal()
+
+(p1 | p2) / (p3 | p4)
+
+```
+
+The residual plots and Q-Q plots show that the **log-transformed model** produces more homoscedastic residuals and better alignment with the normal distribution in the Q-Q plot. In contrast, the residuals of the linear model display signs of heteroscedasticity and heavier tails.
+
+This suggests that the log transformation stabilizes the variance and brings the residuals closer to normality. Therefore, the **log-transformed model is more suitable** for satisfying the assumptions of linear regression.
+
+### Model Estimates
+
+To interpret the relationship between BMI and plasma β-carotene concentration, we present the coefficient estimates from the log-linear model:
+
+The table below shows the **β-estimates** and their associated **95% confidence intervals**. The intercept corresponds to the expected value of log(β-carotene) when BMI is zero (which is not realistic in practice, but needed for the mathematical formulation), while the slope for BMI describes the expected **multiplicative change** in β-carotene concentration for each one-unit increase in BMI.
+
+```{r}
+# Fit log model
+model_log <- lm(log(betaplasma) ~ bmi, data = data)
+
+# Create table of estimates + 95% CI
+conf_table <- as.data.frame(confint(model_log))
+colnames(conf_table) <- c("2.5 %", "97.5 %")
+conf_table$Estimate <- coef(model_log)
+conf_table <- conf_table[, c("Estimate", "2.5 %", "97.5 %")]
+
+knitr::kable(conf_table, digits = 4, caption = "β estimates and 95% confidence intervals for log-linear model")
+```
+
+The estimate for **BMI** is **−0.0359**, with a 95% confidence interval from **−0.0494 to −0.0224**, indicating a statistically significant negative association. This suggests that for every additional unit increase in BMI, the **log of plasma β-carotene decreases**, implying an **approximate 3.5% reduction** in β-carotene levels per BMI unit.
+
+This negative association supports the hypothesis that higher body fat may be linked to lower concentrations of this micronutrient.
+
+## Linear Model with Log Transformation and Back-Transformation
+
+To investigate how plasma β-carotene levels relate to BMI, we fit a linear regression model where the outcome was **log-transformed β-carotene concentration**. This transformation helps satisfy linear regression assumptions, especially linearity and homoscedasticity.
+
+Below, we show two plots:
+
+-   The **top plot** shows the relationship between BMI and the log-transformed β-carotene levels, with fitted line, 95% confidence interval, and 95% prediction interval.
+-   The **bottom plot** displays the same model but transformed back to the original β-carotene scale (ng/ml). This gives a more intuitive interpretation of the effect in absolute terms.
+
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=7, fig.cap="Log-scale and back-transformed plots with 95% CI and prediction intervals."}
+
+
+# Prediction grid
+bmi_seq <- data.frame(bmi = seq(min(data$bmi), max(data$bmi), length.out = 100))
+pred_ci <- predict(model_log, newdata = bmi_seq, interval = "confidence")
+pred_pi <- predict(model_log, newdata = bmi_seq, interval = "prediction")
+
+# Combine into data frame
+plot_df <- cbind(bmi_seq, pred_ci,
+                 pi_lwr = pred_pi[, "lwr"],
+                 pi_upr = pred_pi[, "upr"])
+
+# --- Plot 1: log(betaplasma) vs BMI ---
+plot_log <- ggplot() +
+  geom_point(data = data, aes(x = bmi, y = log(betaplasma)), alpha = 0.6) +
+  geom_line(data = plot_df, aes(x = bmi, y = fit), color = "blue") +
+  geom_ribbon(data = plot_df, aes(x = bmi, ymin = lwr, ymax = upr), fill = "blue", alpha = 0.3) +
+  geom_ribbon(data = plot_df, aes(x = bmi, ymin = pi_lwr, ymax = pi_upr), fill = "gray", alpha = 0.15) +
+  labs(title = "Log(β-carotene) vs BMI",
+       x = "BMI", y = "log(β-carotene)") +
+  theme_minimal()
+
+# --- Back-transform predictions ---
+plot_df$fit_exp <- exp(plot_df$fit)
+plot_df$lwr_exp <- exp(plot_df$lwr)
+plot_df$upr_exp <- exp(plot_df$upr)
+plot_df$pi_lwr_exp <- exp(plot_df$pi_lwr)
+plot_df$pi_upr_exp <- exp(plot_df$pi_upr)
+
+# --- Plot 2: betaplasma vs BMI (back-transformed) ---
+plot_back <- ggplot() +
+  geom_point(data = data, aes(x = bmi, y = betaplasma), alpha = 0.6) +
+  geom_line(data = plot_df, aes(x = bmi, y = fit_exp), color = "blue") +
+  geom_ribbon(data = plot_df, aes(x = bmi, ymin = lwr_exp, ymax = upr_exp), fill = "blue", alpha = 0.3) +
+  geom_ribbon(data = plot_df, aes(x = bmi, ymin = pi_lwr_exp, ymax = pi_upr_exp), fill = "gray", alpha = 0.15) +
+  labs(title = "Plasma β-carotene vs BMI (Back-transformed)",
+       x = "BMI", y = "β-carotene (ng/ml)") +
+  theme_minimal()
+
+# Display side-by-side
+plot_log / plot_back
+```
+
+The log-scale plot shows a clearer linear trend and narrower intervals, while the back-transformed version reveals the actual magnitude of plasma β-carotene and illustrates the asymmetry introduced by the exponential function.
+
+These results suggest that BMI is negatively associated with β-carotene levels, and that using a log transformation is appropriate to model this relationship under the assumptions of linear regression.
