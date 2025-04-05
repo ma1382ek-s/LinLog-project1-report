@@ -34,7 +34,7 @@ Spelling and grammar suggestions from **RStudio Visual Editor** were used.
 ## Author Contributions
 
 | Name | Roles |
-|----|----|
+|--------------------------|----------------------------------------------|
 | Mattis Ranheim | Derivations, Analysis, Discussions, Programming, Visualisation, Writing (original draft), Writing (revision & editing), Project Management |
 
 # Introduction
@@ -50,7 +50,7 @@ The study highlights considerable individual variation in plasma β-carotene lev
 The dataset used in this project contains **315 observations** and **12 variables**, stored in the file `carotene.xlsx`. Each row corresponds to an individual patient from the study. The variables are described below:
 
 | Variable | Description |
-|----|----|
+|--------------------------------------|----------------------------------|
 | `age` | Age (years) |
 | `sex` | Sex (1 = Male, 2 = Female) |
 | `smokstat` | Smoking status (1 = Never, 2 = Former, 3 = Current) |
@@ -225,3 +225,72 @@ plot_log / plot_back
 The log-scale plot shows a clearer linear trend and narrower intervals, while the back-transformed version reveals the actual magnitude of plasma β-carotene and illustrates the asymmetry introduced by the exponential function.
 
 These results suggest that BMI is negatively associated with β-carotene levels, and that using a log transformation is appropriate to model this relationship under the assumptions of linear regression.
+
+### Estimated Changes in Plasma β-carotene for Changes in BMI
+
+We interpret the log-linear regression model by expressing expected **percentage changes** in plasma β-carotene (ng/ml) for three different BMI changes:
+
+1.  **BMI increased by 1 unit**
+2.  **BMI decreased by 1 unit**
+3.  **BMI decreased by 10 units**
+
+```{r}
+# Extract BMI coefficient and confidence interval
+beta1 <- coef(model_log)["bmi"]
+beta1_ci <- confint(model_log)["bmi", ]
+
+# Function to compute percent change
+pc <- function(b) (exp(b) - 1) * 100
+
+# Compute estimates
+change_table <- data.frame(
+  `BMI Change` = c("+1", "−1", "−10"),
+  `Estimate (%)` = round(c(pc(beta1), pc(-beta1), pc(-10 * beta1)), 2),
+  `95% CI Lower (%)` = round(c(pc(beta1_ci[1]), pc(-beta1_ci[2]), pc(-10 * beta1_ci[2])), 2),
+  `95% CI Upper (%)` = round(c(pc(beta1_ci[2]), pc(-beta1_ci[1]), pc(-10 * beta1_ci[1])), 2)
+)
+
+knitr::kable(change_table,
+             caption = "Estimated percentage change in plasma β-carotene for selected changes in BMI (with 95% CI)")
+```
+
+From the table, we can conclude the following:
+
+-   A **1-unit increase in BMI** is associated with a **3.5% decrease** in plasma β-carotene, with a 95% CI ranging from **−4.8% to −2.2%**.
+-   A **1-unit decrease in BMI** leads to an **estimated 3.7% increase** in β-carotene concentration.
+-   A **10-unit decrease in BMI** is associated with a **43% increase**, with a 95% CI ranging from **25% to 64%**.
+
+This nonlinear interpretation stems from the exponential structure of the log-linear model: the relationship between BMI and β-carotene becomes **multiplicative**, not additive.
+
+### Hypothesis Test for Linear Relationship Between BMI and log(β-carotene)
+
+We test whether there is a statistically significant linear relationship between BMI and plasma β-carotene concentration on the log scale, based on the following hypotheses
+
+-   **Null hypothesis:** $H_0:\beta_1=0$ (no relationship between BMI and log((β-carotene))
+
+-   **Alternative hypothesis**: $H_1:\beta_1\neq0$
+
+We use a **t-test** on the slope coefficient in the linear model. The test statistic follows a **t-distribution** with ( n - 2 ) degrees of freedom.
+
+```{r}
+# Get summary of the model
+model_summary <- summary(model_log)
+
+# Extract test statistic, degrees of freedom and p-value for the slope
+t_stat <- model_summary$coefficients["bmi", "t value"]
+df <- model_summary$df[2]  # residual df
+p_value <- model_summary$coefficients["bmi", "Pr(>|t|)"]
+cat("Test statistic (t):   ", round(t_stat, 2), "\n")
+cat("Degrees of freedom:   ", df, "\n")
+cat("Two-sided P-value:    ", format.pval(p_value, digits = 4), "\n")
+
+```
+
+Since the **P-value is far less than 0.05**, we **reject the null hypothesis** at the 5% significance level.\
+This indicates that **BMI is a statistically significant predictor** of log-transformed plasma β-carotene levels.
+
+The **negative value of the t-statistic** (t = –5.23) along with the **negative slope coefficient** (from earlier results) suggests an **inverse relationship**: as BMI increases, the expected log(β-carotene) concentration tends to decrease.
+
+With **313 degrees of freedom**, the model has a strong basis for inference, and the **very low p-value (3.111e-07)** strengthens the evidence against the null hypothesis.
+
+Thus, we conclude that there is a **statistically and practically significant linear relationship** between BMI and log(β-carotene).
