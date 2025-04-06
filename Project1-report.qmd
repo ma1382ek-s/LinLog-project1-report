@@ -74,7 +74,7 @@ where $Y_i$ is the plasma β-carotene concentration for individual $i$, $\mathbf
 
 To satisfy the linear model assumptions (e.g., normality and homoscedasticity of residuals), we may need to apply **suitable transformations** to the response and/or predictor variables throughout the analysis.
 
-## Testing Model Assumptions: Linear vs Log-transformed
+# 1. Testing Model Assumptions: Linear vs Log-transformed
 
 We fitted two models to examine the relationship between BMI and plasma β-carotene levels:
 
@@ -294,3 +294,254 @@ The **negative value of the t-statistic** (t = –5.23) along with the **negativ
 With **313 degrees of freedom**, the model has a strong basis for inference, and the **very low p-value (3.111e-07)** strengthens the evidence against the null hypothesis.
 
 Thus, we conclude that there is a **statistically and practically significant linear relationship** between BMI and log(β-carotene).
+
+# **2.1 Plasma β-carotene and Smoking Habits**
+
+To investigate how smoking status relates to plasma β-carotene levels, we begin by converting the categorical variable smokstat into a factor variable with meaningful labels:
+
+	•	**1** = Never smoker
+
+	•	**2** = Former smoker
+
+	•	**3** = Current smoker
+
+We then present a frequency table showing the number of individuals in each smoking group, and calculate the mean and standard deviation of both **plasma β-carotene (ng/ml)** and **log-transformed plasma β-carotene** for each group.
+
+These summaries help us understand both the distribution of the smoking status variable and the differences in β-carotene levels across categories.
+
+```{r}
+# Convert smokstat to factor with meaningful labels
+data$smokstat <- factor(data$smokstat,
+                        levels = c(1, 2, 3),
+                        labels = c("Never smoker", "Former smoker", "Current smoker"))
+
+# Frequency table
+freq_table <- table(data$smokstat)
+print("Frequency table for smokstat:")
+print(freq_table)
+
+# Calculate mean and SD for betaplasma and log(betaplasma) by smoking group
+library(dplyr)
+
+summary_table <- data %>%
+  group_by(smokstat) %>%
+  summarise(
+    Count = n(),
+    Mean_beta = mean(betaplasma, na.rm = TRUE),
+    SD_beta = sd(betaplasma, na.rm = TRUE),
+    Mean_log = mean(log(betaplasma), na.rm = TRUE),
+    SD_log = sd(log(betaplasma), na.rm = TRUE)
+  )
+
+# Show the summary table
+print("Summary statistics by smoking category:")
+print(summary_table)
+```
+
+These summaries will later guide our modeling choices, including the selection of a reference category for regression and whether a log transformation of the response variable remains appropriate when including smokstat as a predictor.
+
+**Reference Category Choice and Distribution Plots**
+
+Given the three smoking categories — *Never smoker*, *Former smoker*, and *Current smoker* — we choose **Never smoker** as the reference category in our regression modeling. This choice is motivated by the following:
+
+	•	It is the **largest group** (n = 157), ensuring stable estimates when used as baseline.
+
+	•	It represents a **natural baseline** with respect to exposure — those who have not been exposed to smoking-related influences.
+
+	•	Comparing other groups (former and current smokers) to this “cleanest” category allows for **straightforward interpretation** of differences in plasma β-carotene levels.
+
+To further assess differences between groups and evaluate the need for transformation, we present boxplots of plasma β-carotene and log-transformed β-carotene across smoking status:
+
+```{r}
+
+# Raw scale
+p_beta <- ggplot(data, aes(x = smokstat, y = betaplasma, fill = smokstat)) +
+  geom_boxplot(alpha = 0.6) +
+  labs(title = "Plasma β-carotene by Smoking Status",
+       x = "Smoking Status", y = "β-carotene (ng/ml)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Log scale
+p_log <- ggplot(data, aes(x = smokstat, y = log(betaplasma), fill = smokstat)) +
+  geom_boxplot(alpha = 0.6) +
+  labs(title = "Log(Plasma β-carotene) by Smoking Status",
+       x = "Smoking Status", y = "log(β-carotene)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+p_beta / p_log
+```
+
+The boxplots reveal substantial skewness and variability in the raw β-carotene values, especially among non-smokers and former smokers. The **log-transformed plot** shows a more symmetric and homoscedastic distribution across groups, supporting the continued use of **log(β-carotene)** as the dependent variable in regression modeling.
+
+## **2.2 Modeling β-carotene and Smoking Status**
+
+**Comparing Reference Categories in Categorical Regression**
+
+We investigate how plasma β-carotene levels (on the log scale) differ across smoking status categories by fitting two versions of a linear regression model:
+
+	•	In **Model A**, the reference category is **“Never smoker”**
+
+	•	In **Model B**, the reference category is **“Current smoker”**
+
+```{r}
+# Fit model with "Never smoker" as reference category
+data$smokstat_never <- relevel(data$smokstat, ref = "Never smoker")
+model_never <- lm(log(betaplasma) ~ smokstat_never, data = data)
+summary_never <- summary(model_never)
+
+# Fit model with "Current smoker" as reference category
+data$smokstat_current <- relevel(data$smokstat, ref = "Current smoker")
+model_current <- lm(log(betaplasma) ~ smokstat_current, data = data)
+summary_current <- summary(model_current)
+
+# Extract summary tables
+cat("Model with 'Never smoker' as reference:\n")
+summary_never$coefficients
+
+cat("\nModel with 'Current smoker' as reference:\n")
+summary_current$coefficients
+```
+
+### **Interpretation of Dummy Coding**
+
+	•	In both models, the **intercept** represents the mean log(β-carotene) level for the **reference category**.
+
+	•	The other coefficients represent the difference in mean log(β-carotene) compared to the reference.
+
+	•	In Model A, the intercept corresponds to “Never smoker”, and the coefficients show how much lower (on average) former or current smokers are.
+
+	•	In Model B, the intercept corresponds to “Current smoker”, and the coefficients show how much higher never and former smokers are.
+
+### **Which Reference Category Is More Reasonable?**
+
+We argue that **“Never smoker” is the more reasonable reference category**, for several reasons:
+
+	1.	**Interpretability**: Using a baseline group that is not affected by the exposure (smoking) allows for clearer interpretation of how smoking status impacts β-carotene levels. It’s more intuitive to interpret how smoking decreases levels relative to a clean baseline (non-smoker).
+
+	2.	**Scientific Relevance**: “Never smokers” likely represent the physiological baseline, whereas “Current smokers” are more likely to be a group with altered biology.
+
+	3.	**Model Stability**: Model A exhibits **smaller standard errors** for the intercept and slightly more balanced standard errors overall. This suggests more stable estimation around the baseline.
+
+As a result, we will refer to **Model A (with “Never smoker” as the reference)** as **Model 2(b)** in subsequent analyses.
+
+## 2.3 Predicted β-carotene Levels by Smoking Group
+
+To further understand the relationship between smoking habits and plasma β-carotene concentration, we now compute predicted values for each smoking group using both model versions:
+
+-   **Model A**: Uses "Never smoker" as the reference category.
+-   **Model B**: Uses "Current smoker" as the reference category.
+
+For each model, we calculate:
+
+-   The **expected log( β-carotene )** level with 95% confidence intervals.
+-   The **expected β-carotene (ng/ml)** level on the original scale by back-transforming the predictions (i.e., applying the exponential function).
+
+We compute these predictions for: - Never smokers - Former smokers - Current smokers
+
+```{r}
+# Generate a prediction data frame with each smoking category
+newdata <- data.frame(smokstat = factor(c("Never smoker", "Former smoker", "Current smoker"), levels = levels(data$smokstat)))
+
+# Model A: Never smoker as reference
+model_never <- lm(log(betaplasma) ~ smokstat, data = data)
+
+# Predict log(betaplasma) and 95% CI using Model A
+pred_log_never <- predict(model_never, newdata = newdata, interval = "confidence")
+
+# Back-transform to betaplasma scale (ng/ml)
+pred_beta_never <- exp(pred_log_never)
+
+# Model B: Current smoker as reference
+data$smokstat_current <- relevel(data$smokstat, ref = "Current smoker")
+model_current <- lm(log(betaplasma) ~ smokstat_current, data = data)
+
+# Predict log(betaplasma) using Model B
+newdata_current <- data.frame(smokstat_current = factor(c("Never smoker", "Former smoker", "Current smoker"), levels = levels(data$smokstat_current)))
+
+pred_log_current <- predict(model_current, newdata = newdata_current, interval = "confidence")
+pred_beta_current <- exp(pred_log_current)
+
+# Combine results for comparison
+results <- data.frame(
+  Group = c("Never smoker", "Former smoker", "Current smoker"),
+  
+  # Log scale predictions
+  Log_ModelA_Estimate = round(pred_log_never[, "fit"], 3),
+  Log_ModelA_Lower    = round(pred_log_never[, "lwr"], 3),
+  Log_ModelA_Upper    = round(pred_log_never[, "upr"], 3),
+  
+  Log_ModelB_Estimate = round(pred_log_current[, "fit"], 3),
+  Log_ModelB_Lower    = round(pred_log_current[, "lwr"], 3),
+  Log_ModelB_Upper    = round(pred_log_current[, "upr"], 3),
+  
+  # Back-transformed scale
+  Beta_ModelA_Estimate = round(pred_beta_never[, "fit"], 1),
+  Beta_ModelA_Lower    = round(pred_beta_never[, "lwr"], 1),
+  Beta_ModelA_Upper    = round(pred_beta_never[, "upr"], 1),
+  
+  Beta_ModelB_Estimate = round(pred_beta_current[, "fit"], 1),
+  Beta_ModelB_Lower    = round(pred_beta_current[, "lwr"], 1),
+  Beta_ModelB_Upper    = round(pred_beta_current[, "upr"], 1)
+)
+
+print(results)
+```
+
+### Interpretation
+
+We see that the predicted values and their 95% confidence intervals are **identical** for both models:
+
+-   For **Never smokers**, the estimated plasma β-carotene level is approximately **156.2 ng/ml** with a 95% CI of **138.8 to 175.7**.
+-   For **Former smokers**, the level is approximately **139.9 ng/ml** with a CI of **121.9 to 160.6**.
+-   For **Current smokers**, it is around **100.9 ng/ml**, with a CI of **80.5 to 126.3**.
+
+This confirms that **the predictions and their confidence intervals are invariant to the choice of reference level**, as expected. Changing the reference category affects the interpretation of the regression coefficients, but not the actual fitted values or predictions.
+
+These values also align well with the group-wise means from section 2(a), reinforcing that the model provides an appropriate summary of the data.
+
+## 2.4 Testing for Differences Between Smoking Groups
+
+To evaluate whether smoking status has a statistically significant effect on plasma β-carotene levels (on the log scale), we fit the model:
+
+```{r}
+# Fit the linear model using log-transformed outcome
+model_smok <- lm(log(betaplasma) ~ smokstat, data = data)
+
+# Perform ANOVA (F-test)
+anova_result <- anova(model_smok)
+
+# View full ANOVA table
+print(anova_result)
+
+# Extract values for reporting
+f_stat <- anova_result["smokstat", "F value"]
+df1 <- anova_result["smokstat", "Df"]
+df2 <- anova_result["Residuals", "Df"]
+p_val <- anova_result["smokstat", "Pr(>F)"]
+
+cat("F-statistic:", round(f_stat, 2), "\n")
+cat("Degrees of freedom:", df1, "and", df2, "\n")
+cat("P-value:", format.pval(p_val, digits = 4), "\n")
+```
+
+We then applied an **ANOVA F-test** to compare the group means across the three smoking categories (Never smoker, Former smoker, and Current smoker).
+
+The hypotheses for the test are:
+
+	•	**Null hypothesis (H₀):** μ₁ = μ₂ = μ₃ — all groups have the same mean log plasma β-carotene level.
+
+	•	**Alternative hypothesis (H₁):** At least one group has a different mean. The test result gave the following:
+
+	•	**F-statistic:** 5.75
+
+	•	**Degrees of freedom:** 2 and 312
+
+	•	**P-value:** 0.00353
+
+### **Conclusion**
+
+Since the p-value is below the significance level of 0.05, we **reject the null hypothesis**. This indicates that there is a statistically significant difference in mean log plasma β-carotene levels among the different smoking status categories.
+
+# 3.1 Multiple Linear Regression
