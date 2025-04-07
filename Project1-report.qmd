@@ -34,7 +34,7 @@ Spelling and grammar suggestions from **RStudio Visual Editor** were used.
 ## Author Contributions
 
 | Name | Roles |
-|--------------------------|----------------------------------------------|
+|---------------------------|---------------------------------------------|
 | Mattis Ranheim | Derivations, Analysis, Discussions, Programming, Visualisation, Writing (original draft), Writing (revision & editing), Project Management |
 
 # Introduction
@@ -90,15 +90,15 @@ These graphs show the residual and QQ-plots for the **Linear** and log-trans
 ```{r}
 #Loading the data
 library(readxl)
-data <- read_excel("data/carotene.xlsx") 
+study_data <- read_excel("data/carotene.xlsx") 
 ```
 
 ```{r}
 # Linear model (no transformation)
-model_lin <- lm(betaplasma ~ bmi, data = data)
+model_lin <- lm(betaplasma ~ bmi, data = study_data)
 
 # Log-transformed model
-model_log <- lm(log(betaplasma) ~ bmi, data = data)
+model_log <- lm(log(betaplasma) ~ bmi, data = study_data)
 ```
 
 ```{r}
@@ -106,37 +106,43 @@ model_log <- lm(log(betaplasma) ~ bmi, data = data)
 library(ggplot2)
 library(patchwork)
 
-# Residuals
-data$res_lin <- resid(model_lin)
-data$res_log <- resid(model_log)
-data$fit_lin <- fitted(model_lin)
-data$fit_log <- fitted(model_log)
+# Saving Residuals
+plot_df_lin <- data.frame(
+  fitted = fitted(model_lin),
+  resid = resid(model_lin)
+  )
+
+plot_df_log <- data.frame(
+  fitted = fitted(model_log),
+  resid = resid(model_log)
+  )
 
 # Linear model plots
-p1 <- ggplot(data, aes(x = fit_lin, y = res_lin)) +
+p1 <- ggplot(plot_df_lin, aes(x = fitted, y = resid)) +
   geom_point() +
   geom_hline(yintercept = 0, color = "red") +
   labs(title = "Residuals vs Fitted (Linear)", x = "Fitted", y = "Residuals") +
   theme_minimal()
 
-p2 <- ggplot(data, aes(sample = res_lin)) +
+p2 <- ggplot(plot_df_lin, aes(sample = resid)) +
   stat_qq() +
   stat_qq_line(color = "red") +
   labs(title = "Q-Q Plot (Linear)", x = "Theoretical", y = "Sample Quantiles") +
   theme_minimal()
 
 # Log model plots
-p3 <- ggplot(data, aes(x = fit_log, y = res_log)) +
+p3 <- ggplot(plot_df_log, aes(x = fitted, y = resid)) +
   geom_point() +
   geom_hline(yintercept = 0, color = "blue") +
   labs(title = "Residuals vs Fitted (Log)", x = "Fitted", y = "Residuals") +
   theme_minimal()
 
-p4 <- ggplot(data, aes(sample = res_log)) +
+p4 <- ggplot(plot_df_log, aes(sample = resid)) +
   stat_qq() +
   stat_qq_line(color = "blue") +
-  labs(title = "Q-Q Plot (Log)", x = "Theoretical", y = "Sample Quantiles") +
+  labs(title = "Q-Q Plot (Log)", x = "Theoretical Quantiles", y = "Sample Quantiles") +
   theme_minimal()
+
 
 (p1 | p2) / (p3 | p4)
 
@@ -146,30 +152,27 @@ The residual plots and Q-Q plots show that the **log-transformed model** produce
 
 This suggests that the log transformation stabilizes the variance and brings the residuals closer to normality. Therefore, the **log-transformed model is more suitable** for satisfying the assumptions of linear regression.
 
-### Model Estimates
+## 1.2 Model Estimates
 
 To interpret the relationship between BMI and plasma β-carotene concentration, we present the coefficient estimates from the log-linear model:
 
 The table below shows the **β-estimates** and their associated **95% confidence intervals**. The intercept corresponds to the expected value of log(β-carotene) when BMI is zero (which is not realistic in practice, but needed for the mathematical formulation), while the slope for BMI describes the expected **multiplicative change** in β-carotene concentration for each one-unit increase in BMI.
 
 ```{r}
-# Fit log model
-model_log <- lm(log(betaplasma) ~ bmi, data = data)
 
 # Create table of estimates + 95% CI
 conf_table <- as.data.frame(confint(model_log))
-colnames(conf_table) <- c("2.5 %", "97.5 %")
 conf_table$Estimate <- coef(model_log)
 conf_table <- conf_table[, c("Estimate", "2.5 %", "97.5 %")]
 
-knitr::kable(conf_table, digits = 4, caption = "β estimates and 95% confidence intervals for log-linear model")
+round(conf_table, 4)
 ```
 
-The estimate for **BMI** is **−0.0359**, with a 95% confidence interval from **−0.0494 to −0.0224**, indicating a statistically significant negative association. This suggests that for every additional unit increase in BMI, the **log of plasma β-carotene decreases**, implying an **approximate 3.5% reduction** in β-carotene levels per BMI unit.
+The estimate for $\beta_1$ is **−0.0359**, with a 95% confidence interval from **−0.0494 to −0.0224**, indicating a statistically significant negative association. This suggests that for every additional unit increase in BMI, the **log of plasma β-carotene decreases**, implying an **approximate 3.5% reduction** in β-carotene levels per BMI unit.
 
 This negative association supports the hypothesis that higher body fat may be linked to lower concentrations of this micronutrient.
 
-## Linear Model with Log Transformation and Back-Transformation
+### 1.2.2 Linear Model confidence and prediction intervals with Log Transformation and Back-Transformation
 
 To investigate how plasma β-carotene levels relate to BMI, we fit a linear regression model where the outcome was **log-transformed β-carotene concentration**. This transformation helps satisfy linear regression assumptions, especially linearity and homoscedasticity.
 
@@ -182,7 +185,7 @@ Below, we show two plots:
 
 
 # Prediction grid
-bmi_seq <- data.frame(bmi = seq(min(data$bmi), max(data$bmi), length.out = 100))
+bmi_seq <- data.frame(bmi = seq(min(study_data$bmi), max(study_data$bmi), length.out = 100))
 pred_ci <- predict(model_log, newdata = bmi_seq, interval = "confidence")
 pred_pi <- predict(model_log, newdata = bmi_seq, interval = "prediction")
 
@@ -193,7 +196,7 @@ plot_df <- cbind(bmi_seq, pred_ci,
 
 # --- Plot 1: log(betaplasma) vs BMI ---
 plot_log <- ggplot() +
-  geom_point(data = data, aes(x = bmi, y = log(betaplasma)), alpha = 0.6) +
+  geom_point(data = study_data, aes(x = bmi, y = log(betaplasma)), alpha = 0.6) +
   geom_line(data = plot_df, aes(x = bmi, y = fit), color = "blue") +
   geom_ribbon(data = plot_df, aes(x = bmi, ymin = lwr, ymax = upr), fill = "blue", alpha = 0.3) +
   geom_ribbon(data = plot_df, aes(x = bmi, ymin = pi_lwr, ymax = pi_upr), fill = "gray", alpha = 0.15) +
@@ -210,7 +213,7 @@ plot_df$pi_upr_exp <- exp(plot_df$pi_upr)
 
 # --- Plot 2: betaplasma vs BMI (back-transformed) ---
 plot_back <- ggplot() +
-  geom_point(data = data, aes(x = bmi, y = betaplasma), alpha = 0.6) +
+  geom_point(data = study_data, aes(x = bmi, y = betaplasma), alpha = 0.6) +
   geom_line(data = plot_df, aes(x = bmi, y = fit_exp), color = "blue") +
   geom_ribbon(data = plot_df, aes(x = bmi, ymin = lwr_exp, ymax = upr_exp), fill = "blue", alpha = 0.3) +
   geom_ribbon(data = plot_df, aes(x = bmi, ymin = pi_lwr_exp, ymax = pi_upr_exp), fill = "gray", alpha = 0.15) +
@@ -226,7 +229,7 @@ The log-scale plot shows a clearer linear trend and narrower intervals, while th
 
 These results suggest that BMI is negatively associated with β-carotene levels, and that using a log transformation is appropriate to model this relationship under the assumptions of linear regression.
 
-### Estimated Changes in Plasma β-carotene for Changes in BMI
+## 1.3 Estimated Changes in Plasma β-carotene for Changes in BMI
 
 We interpret the log-linear regression model by expressing expected **percentage changes** in plasma β-carotene (ng/ml) for three different BMI changes:
 
@@ -243,6 +246,8 @@ beta1_ci <- confint(model_log)["bmi", ]
 pc <- function(b) (exp(b) - 1) * 100
 
 # Compute estimates
+
+
 change_table <- data.frame(
   `BMI Change` = c("+1", "−1", "−10"),
   `Estimate (%)` = round(c(pc(beta1), pc(-beta1), pc(-10 * beta1)), 2),
@@ -250,19 +255,18 @@ change_table <- data.frame(
   `95% CI Upper (%)` = round(c(pc(beta1_ci[2]), pc(-beta1_ci[1]), pc(-10 * beta1_ci[1])), 2)
 )
 
-knitr::kable(change_table,
-             caption = "Estimated percentage change in plasma β-carotene for selected changes in BMI (with 95% CI)")
+{ cat("Estimated % change in plasma β-carotene (95% CI)\n\n"); change_table }
 ```
 
 From the table, we can conclude the following:
 
--   A **1-unit increase in BMI** is associated with a **3.5% decrease** in plasma β-carotene, with a 95% CI ranging from **−4.8% to −2.2%**.
--   A **1-unit decrease in BMI** leads to an **estimated 3.7% increase** in β-carotene concentration.
+-   A **1-unit increase in BMI** is associated with a **3.5% decrease** in plasma β-carotene concentration, with a 95% CI ranging from **−4.8% to −2.2%**.
+-   A **1-unit decrease in BMI** leads to an **estimated 3.7% increase** in plasma β-carotene concentration, with a 95% CI ranging from **5.1% to 2.3%**.
 -   A **10-unit decrease in BMI** is associated with a **43% increase**, with a 95% CI ranging from **25% to 64%**.
 
 This nonlinear interpretation stems from the exponential structure of the log-linear model: the relationship between BMI and β-carotene becomes **multiplicative**, not additive.
 
-### Hypothesis Test for Linear Relationship Between BMI and log(β-carotene)
+## 1.4 Hypothesis Test for Linear Relationship Between BMI and log(β-carotene)
 
 We test whether there is a statistically significant linear relationship between BMI and plasma β-carotene concentration on the log scale, based on the following hypotheses
 
@@ -299,11 +303,11 @@ Thus, we conclude that there is a **statistically and practically significant li
 
 To investigate how smoking status relates to plasma β-carotene levels, we begin by converting the categorical variable smokstat into a factor variable with meaningful labels:
 
-	•	**1** = Never smoker
+-   **1** = Never Smoker
 
-	•	**2** = Former smoker
+-   **2** = Former Smoker
 
-	•	**3** = Current smoker
+-   **3** = Current Smoker
 
 We then present a frequency table showing the number of individuals in each smoking group, and calculate the mean and standard deviation of both **plasma β-carotene (ng/ml)** and **log-transformed plasma β-carotene** for each group.
 
@@ -311,20 +315,20 @@ These summaries help us understand both the distribution of the smoking status v
 
 ```{r}
 # Convert smokstat to factor with meaningful labels
-data$smokstat <- factor(data$smokstat,
+study_data$smokstat <- factor(study_data$smokstat,
                         levels = c(1, 2, 3),
                         labels = c("Never smoker", "Former smoker", "Current smoker"))
 
 # Frequency table
-freq_table <- table(data$smokstat)
+freq_table <- table(study_data$smokstat)
 print("Frequency table for smokstat:")
 print(freq_table)
 
 # Calculate mean and SD for betaplasma and log(betaplasma) by smoking group
 library(dplyr)
 
-summary_table <- data %>%
-  group_by(smokstat) %>%
+summary_table <- study_data |> 
+  group_by(smokstat) |> 
   summarise(
     Count = n(),
     Mean_beta = mean(betaplasma, na.rm = TRUE),
@@ -344,18 +348,20 @@ These summaries will later guide our modeling choices, including the selection o
 
 Given the three smoking categories — *Never smoker*, *Former smoker*, and *Current smoker* — we choose **Never smoker** as the reference category in our regression modeling. This choice is motivated by the following:
 
-	•	It is the **largest group** (n = 157), ensuring stable estimates when used as baseline.
+• It is the **largest group** (n = 157), ensuring stable estimates when used as baseline.
 
-	•	It represents a **natural baseline** with respect to exposure — those who have not been exposed to smoking-related influences.
+• It represents a **natural baseline** with respect to exposure — those who have not been exposed to smoking-related influences.
 
-	•	Comparing other groups (former and current smokers) to this “cleanest” category allows for **straightforward interpretation** of differences in plasma β-carotene levels.
+• Comparing other groups (former and current smokers) to this “cleanest” category allows for **straightforward interpretation** of differences in plasma β-carotene levels.
+
+### Boxplots for Smoking Categories
 
 To further assess differences between groups and evaluate the need for transformation, we present boxplots of plasma β-carotene and log-transformed β-carotene across smoking status:
 
 ```{r}
 
 # Raw scale
-p_beta <- ggplot(data, aes(x = smokstat, y = betaplasma, fill = smokstat)) +
+p_beta <- ggplot(study_data, aes(x = smokstat, y = betaplasma, fill = smokstat)) +
   geom_boxplot(alpha = 0.6) +
   labs(title = "Plasma β-carotene by Smoking Status",
        x = "Smoking Status", y = "β-carotene (ng/ml)") +
@@ -363,7 +369,7 @@ p_beta <- ggplot(data, aes(x = smokstat, y = betaplasma, fill = smokstat)) +
   theme(legend.position = "none")
 
 # Log scale
-p_log <- ggplot(data, aes(x = smokstat, y = log(betaplasma), fill = smokstat)) +
+p_log <- ggplot(study_data, aes(x = smokstat, y = log(betaplasma), fill = smokstat)) +
   geom_boxplot(alpha = 0.6) +
   labs(title = "Log(Plasma β-carotene) by Smoking Status",
        x = "Smoking Status", y = "log(β-carotene)") +
@@ -381,19 +387,19 @@ The boxplots reveal substantial skewness and variability in the raw β-carotene 
 
 We investigate how plasma β-carotene levels (on the log scale) differ across smoking status categories by fitting two versions of a linear regression model:
 
-	•	In **Model A**, the reference category is **“Never smoker”**
+• In **Model A**, the reference category is **“Never smoker”**
 
-	•	In **Model B**, the reference category is **“Current smoker”**
+• In **Model B**, the reference category is **“Current smoker”**
 
 ```{r}
 # Fit model with "Never smoker" as reference category
-data$smokstat_never <- relevel(data$smokstat, ref = "Never smoker")
-model_never <- lm(log(betaplasma) ~ smokstat_never, data = data)
+study_data$smokstat_never <- relevel(study_data$smokstat, ref = "Never smoker")
+model_never <- lm(log(betaplasma) ~ smokstat_never, data = study_data)
 summary_never <- summary(model_never)
 
 # Fit model with "Current smoker" as reference category
-data$smokstat_current <- relevel(data$smokstat, ref = "Current smoker")
-model_current <- lm(log(betaplasma) ~ smokstat_current, data = data)
+study_data$smokstat_current <- relevel(study_data$smokstat, ref = "Current smoker")
+model_current <- lm(log(betaplasma) ~ smokstat_current, data = study_data)
 summary_current <- summary(model_current)
 
 # Extract summary tables
@@ -406,23 +412,23 @@ summary_current$coefficients
 
 ### **Interpretation of Dummy Coding**
 
-	•	In both models, the **intercept** represents the mean log(β-carotene) level for the **reference category**.
+• In both models, the **intercept** represents the mean log(β-carotene) level for the **reference category**.
 
-	•	The other coefficients represent the difference in mean log(β-carotene) compared to the reference.
+• The other coefficients represent the difference in mean log(β-carotene) compared to the reference.
 
-	•	In Model A, the intercept corresponds to “Never smoker”, and the coefficients show how much lower (on average) former or current smokers are.
+• In Model A, the intercept corresponds to “Never smoker”, and the coefficients show how much lower (on average) former or current smokers are.
 
-	•	In Model B, the intercept corresponds to “Current smoker”, and the coefficients show how much higher never and former smokers are.
+• In Model B, the intercept corresponds to “Current smoker”, and the coefficients show how much higher never and former smokers are.
 
 ### **Which Reference Category Is More Reasonable?**
 
 We argue that **“Never smoker” is the more reasonable reference category**, for several reasons:
 
-	1.	**Interpretability**: Using a baseline group that is not affected by the exposure (smoking) allows for clearer interpretation of how smoking status impacts β-carotene levels. It’s more intuitive to interpret how smoking decreases levels relative to a clean baseline (non-smoker).
+1.  **Interpretability**: Using a baseline group that is not affected by the exposure (smoking) allows for clearer interpretation of how smoking status impacts β-carotene levels. It’s more intuitive to interpret how smoking decreases levels relative to a clean baseline (non-smoker).
 
-	2.	**Scientific Relevance**: “Never smokers” likely represent the physiological baseline, whereas “Current smokers” are more likely to be a group with altered biology.
+2.  **Scientific Relevance**: “Never smokers” likely represent the physiological baseline, whereas “Current smokers” are more likely to be a group with altered biology.
 
-	3.	**Model Stability**: Model A exhibits **smaller standard errors** for the intercept and slightly more balanced standard errors overall. This suggests more stable estimation around the baseline.
+3.  **Model Stability**: Model A exhibits **smaller standard errors** for the intercept and slightly more balanced standard errors overall. This suggests more stable estimation around the baseline.
 
 As a result, we will refer to **Model A (with “Never smoker” as the reference)** as **Model 2(b)** in subsequent analyses.
 
@@ -441,46 +447,36 @@ For each model, we calculate:
 We compute these predictions for: - Never smokers - Former smokers - Current smokers
 
 ```{r}
-# Generate a prediction data frame with each smoking category
-newdata <- data.frame(smokstat = factor(c("Never smoker", "Former smoker", "Current smoker"), levels = levels(data$smokstat)))
+# Generate prediction data for all three smoking categories
+smoking_levels <- levels(study_data$smokstat)
+newdata_never <- data.frame(smokstat_never = factor(smoking_levels, levels = smoking_levels))
+newdata_current <- data.frame(smokstat_current = factor(smoking_levels, levels = smoking_levels))
 
-# Model A: Never smoker as reference
-model_never <- lm(log(betaplasma) ~ smokstat, data = data)
+# Predict log(betaplasma) and 95% CI using existing models
+pred_log_never   <- predict(model_never, newdata = newdata_never, interval = "confidence")
+pred_beta_never  <- exp(pred_log_never)
 
-# Predict log(betaplasma) and 95% CI using Model A
-pred_log_never <- predict(model_never, newdata = newdata, interval = "confidence")
-
-# Back-transform to betaplasma scale (ng/ml)
-pred_beta_never <- exp(pred_log_never)
-
-# Model B: Current smoker as reference
-data$smokstat_current <- relevel(data$smokstat, ref = "Current smoker")
-model_current <- lm(log(betaplasma) ~ smokstat_current, data = data)
-
-# Predict log(betaplasma) using Model B
-newdata_current <- data.frame(smokstat_current = factor(c("Never smoker", "Former smoker", "Current smoker"), levels = levels(data$smokstat_current)))
-
-pred_log_current <- predict(model_current, newdata = newdata_current, interval = "confidence")
+pred_log_current  <- predict(model_current, newdata = newdata_current, interval = "confidence")
 pred_beta_current <- exp(pred_log_current)
 
 # Combine results for comparison
 results <- data.frame(
-  Group = c("Never smoker", "Former smoker", "Current smoker"),
-  
+  Group = smoking_levels,
+
   # Log scale predictions
   Log_ModelA_Estimate = round(pred_log_never[, "fit"], 3),
   Log_ModelA_Lower    = round(pred_log_never[, "lwr"], 3),
   Log_ModelA_Upper    = round(pred_log_never[, "upr"], 3),
-  
+
   Log_ModelB_Estimate = round(pred_log_current[, "fit"], 3),
   Log_ModelB_Lower    = round(pred_log_current[, "lwr"], 3),
   Log_ModelB_Upper    = round(pred_log_current[, "upr"], 3),
-  
-  # Back-transformed scale
+
+  # Back-transformed (original scale)
   Beta_ModelA_Estimate = round(pred_beta_never[, "fit"], 1),
   Beta_ModelA_Lower    = round(pred_beta_never[, "lwr"], 1),
   Beta_ModelA_Upper    = round(pred_beta_never[, "upr"], 1),
-  
+
   Beta_ModelB_Estimate = round(pred_beta_current[, "fit"], 1),
   Beta_ModelB_Lower    = round(pred_beta_current[, "lwr"], 1),
   Beta_ModelB_Upper    = round(pred_beta_current[, "upr"], 1)
@@ -506,11 +502,9 @@ These values also align well with the group-wise means from section 2(a), reinfo
 To evaluate whether smoking status has a statistically significant effect on plasma β-carotene levels (on the log scale), we fit the model:
 
 ```{r}
-# Fit the linear model using log-transformed outcome
-model_smok <- lm(log(betaplasma) ~ smokstat, data = data)
 
 # Perform ANOVA (F-test)
-anova_result <- anova(model_smok)
+anova_result <- anova(model_current)
 
 # View full ANOVA table
 print(anova_result)
@@ -521,24 +515,24 @@ df1 <- anova_result["smokstat", "Df"]
 df2 <- anova_result["Residuals", "Df"]
 p_val <- anova_result["smokstat", "Pr(>F)"]
 
-cat("F-statistic:", round(f_stat, 2), "\n")
+cat("\nF-statistic:", round(f_stat, 2), "\n")
 cat("Degrees of freedom:", df1, "and", df2, "\n")
 cat("P-value:", format.pval(p_val, digits = 4), "\n")
 ```
 
-We then applied an **ANOVA F-test** to compare the group means across the three smoking categories (Never smoker, Former smoker, and Current smoker).
+We then applied an **ANOVA Global F-test** to compare the group means across the three smoking categories (Never smoker, Former smoker, and Current smoker).
 
 The hypotheses for the test are:
 
-	•	**Null hypothesis (H₀):** μ₁ = μ₂ = μ₃ — all groups have the same mean log plasma β-carotene level.
+• **Null hypothesis (H₀):** μ₁ = μ₂ = μ₃ — all groups have the same mean log plasma β-carotene level.
 
-	•	**Alternative hypothesis (H₁):** At least one group has a different mean. The test result gave the following:
+• **Alternative hypothesis (H₁):** At least one group has a different mean. The test result gave the following:
 
-	•	**F-statistic:** 5.75
+• **F-statistic:** 5.75
 
-	•	**Degrees of freedom:** 2 and 312
+• **Degrees of freedom:** 2 and 312
 
-	•	**P-value:** 0.00353
+• **P-value:** 0.00353
 
 ### **Conclusion**
 
