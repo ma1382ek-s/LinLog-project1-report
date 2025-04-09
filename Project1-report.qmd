@@ -539,3 +539,393 @@ The hypotheses for the test are:
 Since the p-value is below the significance level of 0.05, we **reject the null hypothesis**. This indicates that there is a statistically significant difference in mean log plasma β-carotene levels among the different smoking status categories.
 
 # 3.1 Multiple Linear Regression
+
+In this section, we recode the variables \`sex\` and \`vituse\` as categorical (factor) variables with meaningful labels. This is essential for regression modeling, where we interpret coefficients relative to a reference category.
+
+The variable `sex` is originally coded numerically (1 = male, 2 = female). We convert it into a factor with labels `"male"` and `"female"`. Similarly, the variable `vituse` (vitamin use) is coded as 1 = Yes, fairly often, 2 = Yes, not often, 3 = No. We recode this to `"often"`, `"seldom"` and `"no"` respectively.
+
+```{r}
+
+# Setting levels and labels for sex and vitamin use columns
+mutate(study_data,
+       sex = factor(sex,
+                    levels = c(1, 2),
+                    labels = c("male", "female")),
+       vituse = factor(vituse, 
+                       levels = c(1, 2, 3),
+                       labels = c("often", "seldom", "no"))) -> study_data
+
+# Studying categorical variables to choose reference category
+table(study_data$sex) # "female" many more #obs
+table(study_data$vituse) # "often" most #obs, no would make sense in domain
+```
+
+The frequency table for sex shows that the majority of individuals in the dataset are female. Therefore, setting "female" as the reference category ensures that comparisons are made against the most common group, improving interpretability and often resulting in lower standard errors.
+
+For vituse, the most common category is "often" (vitamin use fairly often). However, from a domain knowledge perspective, "no" (no vitamin use) makes the most sense as a reference group, because it represents the absence of intervention. This allows interpretation of coefficients as the effect of vitamin use relative to no supplementation, which aligns well with research goals.
+
+## 3.2 Pairwise Correlation Analysis and Outlier Detection
+
+To examine potential multicollinearity and other problems among the continuous predictors, we calculate all pairwise Pearson correlations between the following variables:
+
+```         
+•   bmi, age, calories, fat, cholesterol, fiber, alcohol, and betadiet
+```
+
+We focus particularly on correlations stronger than ±0.6, which might indicate collinearity issues if both variables are included in the same regression model. The results are visualized in scatterplots for the highly correlated pairs.
+
+```{r}
+library(rstatix)
+# Cleaning up data-set
+study_data <- study_data |> select(-c(smokstat_never, smokstat_current))
+
+# pairwise correlations, which are larger than 0.6
+cor_results <- study_data |> select(bmi, age, calories, fat, 
+                            cholesterol, fiber, alcohol, betadiet) |>
+  cor_test() |>  filter(var1 < var2) |> 
+  filter(abs(cor) > 0.6)
+
+cor_results
+
+# we get high correlations between calories/fat, calories/cholesterol and cholesterol/fat
+
+plot1 <- ggplot(study_data) + geom_point(data = study_data, aes(y = calories, x = fat))
+plot2 <- ggplot(study_data) + geom_point(data = study_data, aes(y = calories, x = cholesterol))
+plot3 <- ggplot(study_data) + geom_point(data = study_data, aes(y = fat, x = cholesterol))
+
+plot1 + plot2 + plot3
+
+# Studying outlier in alcohol consumption
+filter(study_data, alcohol >= 200) # Potentially add more comments on this outlier later 
+
+```
+
+The correlation table and scatterplots reveal three particularly strong linear relationships:
+
+```         
+•   **Fat and Calories**: r ≈ 0.87
+
+•   **Cholesterol and Calories**: r ≈ 0.66
+
+•   **Cholesterol and Fat**: r ≈ 0.71
+```
+
+These variables are highly interrelated, and care should be taken when including them in the same multiple regression model, due to potential multicollinearity.
+
+### 3.2.2 Outlier Analysis
+
+We also identify the individual who reportedly consumes **over 200 alcoholic drinks per week**, which is flagged as a potential outlier. According to the assignment, 12 bottles of vodka per week equates to about 12 MJ/day. We examine whether this person is also extreme in other nutritional dimensions:
+
+This individual not only consumes 203 alcoholic drinks per week, but also has: • Cholesterol intake: 603 mg/day • Fat intake: 164.3 g/day • Calorie intake: 27.9 MJ/day
+
+All of these values are among the highest in the dataset, suggesting this person is an outlier in multiple nutritional variables. This may impact model fitting or residual diagnostics if not accounted for properly.
+
+This individual not only consumes **203 alcoholic drinks per week**, but also has:
+
+```         
+•   **Cholesterol intake**: 603 mg/day
+
+•   **Fat intake**: 164.3 g/day
+
+•   **Calorie intake**: 27.9 MJ/day
+```
+
+All of these values are among the highest in the dataset, suggesting this person is an outlier in multiple nutritional variables. This may impact model fitting or residual diagnostics if not accounted for properly.
+
+## 3.3 Assessing Multicollinearity with VIF
+
+We now examine whether multicollinearity is an issue in a model where log plasma β-carotene is regressed on all available predictors: bmi, age, calories, fat, cholesterol, fiber, alcohol, betadiet, smokstat, sex, and vituse.
+
+To do this, we compute the Generalized Variance Inflation Factor (GVIF) for each variable. We focus on the adjusted GVIF metric:
+
+$$
+\text{GVIF}^{1/(2 \cdot \text{Df})}
+$$
+
+A GVIF-adjusted value above **2.24** indicates that more than 80% of the variance in that variable can be explained by the remaining variables, which suggests problematic multicollinearity.
+
+```{r}
+
+# Fitting the data
+model_3 <- lm(log(betaplasma) ~ bmi + age + calories + fat + cholesterol + 
+                                fiber + alcohol + betadiet + smokstat + sex + vituse,
+                                data = study_data)
+
+# we will look at GVIF^(1/2f) > 2.24 for the 50 % in R_j 
+library("car")
+vif(model_3)
+# we see once again that it's fat calories  that are above the threshold
+```
+
+As seen above, **calories** and **fat** both exceed the GVIF threshold of 2.24. The strongest multicollinearity is found between these variables, likely due to their strong correlation with each other and with cholesterol (as observed in task 3(b)).
+
+To address this, we remove calories—the most problematic variable—and refit the model to see whether multicollinearity improves.
+
+```{r}
+model_3c <- lm(log(betaplasma) ~ bmi + age + fat + cholesterol + 
+                                fiber + alcohol + betadiet + smokstat + sex + vituse,
+                                data = study_data)
+
+vif(model_3c) # we see that the GVIF values are reasonable, still the highest for fat/cholesterol but ok
+```
+
+After removing calories, all GVIF-adjusted values drop below the threshold, indicating no serious multicollinearity remains. The values for fat and cholesterol remain the highest, but are now within an acceptable range.
+
+We conclude that removing calories substantially improves the multicollinearity profile of the model. We call this **Model 3(c)**
+
+## 3.4 Hypothesis Testing and Model Comparison
+
+We now use **Model 3(c)** to test specific hypotheses about the relationships between log-transformed plasma β-carotene and various explanatory variables. First, we interpret the estimated regression coefficients and their confidence intervals, both on the log scale and in the back-transformed domain (i.e., original β-carotene scale).
+
+The table below presents both the log-scale β-estimates and their exponentiated versions (which represent multiplicative effects on the geometric mean of β-carotene), along with 95% confidence intervals:
+
+```{r}
+model_3c$coefficients # beta coefficients
+exp(model_3c$coefficients) # coefficients in original domain
+exp(confint(model_3c)) # confidence intervals of coeffs. in original domain
+```
+
+We then examine whether the overall model is significant and conduct **three hypothesis tests**, summarized in the table and discussion below.
+
+**(i) Is there a significant relationship between log plasma β-carotene and BMI, adjusting for other variables?**
+
+This is a **t-test** on the BMI coefficient in Model 3(c), testing:
+
+-   **Null hypothesis**: $H_0: \beta_{BMI} = 0$
+
+-   **Alternative hypothesis**: $H_1: \beta_{BMI} \neq 0$
+
+We extract the result from the model summary:
+
+```{r}
+summary(model_3c) # using for statistical tests
+```
+
+```         
+•   **Test statistic**: t = –4.918
+
+•   **Degrees of freedom**: 302
+
+•   **P-value**: 1.44e-06
+```
+
+**Conclusion**: Since the P-value is far below 0.05, we **reject the null hypothesis**. BMI is a statistically significant predictor of log(β-carotene) even after adjusting for other variables.
+
+**(ii) Is this model significantly better than the model from chapter 1 which only used bmi?**
+
+This is an **F-test** comparing **Model 1(b)** (log(β-carotene) \~ bmi) to the full **Model 3(c)**.
+
+-   **Null hypothesis:** $H_0: \beta_{\text{age}} = \beta_{\text{fat}} = \cdots = \beta_{\text{vituse}} = 0$ - All variables except BMI have no added value
+
+-   **Alternative hypothesis:** $H_1:$ At least one of the additional predictors improves the model fit
+
+```{r}
+anova(model_3c, model_log) # i
+```
+
+-   **F-statistic**: 6.6928
+
+-   **Degrees of freedom**: 10 and 302
+
+-   **P-value**: 1.63e-12
+
+**Conclusion**: We **reject the null hypothesis**. The full model is significantly better than using BMI alone.
+
+**(iii) Is Model 3(c) significantly better than the model from chapter 2, which only used smokstat?**
+
+-   **Null hypothesis:** $H_0: \beta_{\text{bmi}} = \beta_{\text{age}} = \cdots = \beta_{\text{vituse}} = 0$ - All variables except SmokStat have no added value
+
+-   **Alternative hypothesis:** $H_1:$ At least one of the additional predictors improves the model fit
+
+```{r}
+anova(model_3c, model_current) # ii
+```
+
+-   **F-statistic**: 6.6928
+
+-   **Degrees of freedom**: 10 and 302
+
+-   **P-value**: 1.63e-12
+
+**Conclusion**: Again, we **reject the null hypothesis**. Model 3(c) adds substantial explanatory power beyond smokstat alone.
+
+## 3.5 Residual Diagnostics for Model 3(c)
+
+To assess the adequacy of Model 3(c), we visually inspect the **studentized residuals** using three standard diagnostic plots:
+
+-   A **residuals vs fitted** plot to detect non-linearity and outliers.
+-   A **spread-location (scale-location)** plot to assess the assumption of **constant variance** (homoscedasticity).
+-   A **Q-Q plot** to evaluate the **normality** of residuals.
+
+These plots help identify potential problems with the model assumptions.
+
+```{r}
+# Calculate studentized residuals and fitted values
+plot_df_3c <- mutate(study_data,
+                            fitted_3c = fitted(model_3c),
+                            rstudent_3c = rstudent(model_3c))
+
+# Plot 1: Studentized residuals vs fitted values
+p1 <- ggplot(plot_df_3c, aes(x = fitted_3c, y = rstudent_3c)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "gray40") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dashed", color = "blue") +
+  geom_hline(yintercept = c(-3, 3), linetype = "dotted", color = "red") +
+  labs(title = "Studentized Residuals vs Fitted Values",
+       x = "Fitted values", y = "Studentized residuals") +
+  theme_minimal()
+
+# Plot 2: Square root of absolute residuals (Spread-Location plot)
+p2 <- ggplot(plot_df_3c, aes(x = fitted_3c, y = sqrt(abs(rstudent_3c)))) +
+  geom_point() +
+  geom_hline(yintercept = sqrt(c(0, qnorm(0.75), 2, 3)), linetype = "dashed", color = "gray40") +
+  labs(title = "Spread-Location Plot",
+       x = "Fitted values", y = expression(sqrt("|studentized residual|"))) +
+  theme_minimal()
+
+# Plot 3: Q-Q Plot of studentized residuals
+p3 <- ggplot(plot_df_3c, aes(sample = rstudent_3c)) +
+  stat_qq(size = 1.5) +
+  stat_qq_line(color = "red") +
+  labs(title = "Q-Q Plot of Studentized Residuals",
+       x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  theme_minimal()
+
+# Display plots side by side
+(p1 | p2) / p3
+
+```
+
+The **residuals vs fitted** plot shows no clear pattern, suggesting that the linearity assumption is reasonable. A few residuals fall beyond ±3, but these are not numerous enough to suggest a systemic issue.
+
+The **spread-location plot** indicates that the variance of residuals remains fairly constant across the range of fitted values, supporting the assumption of homoscedasticity.
+
+In the **Q-Q plot**, the points generally follow the red reference line, though some deviation is observed in the tails. This indicates slight departure from normality, but not to a degree that would seriously undermine the model.
+
+**Conclusion:** Overall, the diagnostic plots support the adequacy of Model 3(c). The residuals show no major violations of linearity, constant variance, or normality assumptions.
+
+## 3.6. Leverage Analysis for Model 3(c)
+
+We now calculate the leverage values for each observation in Model 3(c) and inspect them visually in two diagnostic plots. High-leverage points can exert substantial influence on the model estimates and are often located far from the "center" of the predictor space.
+
+We include horizontal reference lines at (1/n) (black) and (2(p+1)/n) (red), where (n) is the number of observations and (p+1) is the number of model parameters (including the intercept). Observations with leverage values above the red line should be carefully examined.
+
+```{r}
+# Calculate leverage
+model_leverage <- data.frame(
+  yhat_model_3c = predict(model_3c),
+  v_model_3c = hatvalues(model_3c),
+  alcohol = study_data$alcohol,
+  r_model_3c = rstudent(model_3c)
+)
+
+# Identify the number of parameters and observations
+pplus1 <- length(coef(model_3c))  # p + 1
+n <- nobs(model_3c)
+
+# Highlight colors
+highlightcolors <- c("alcohol > 200" = "red", "|r*|>3" = "red")
+
+# Plot 1: Leverage vs linear predictor
+ggplot(model_leverage, aes(x = yhat_model_3c, y = v_model_3c)) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 1/n, linetype = "dashed") +
+  geom_hline(yintercept = 2 * pplus1 / n, color = "red", linetype = "dashed") +
+  labs(title = "Model 3(c): Leverage vs Fitted Values",
+       caption = "Dashed lines: 1/n (black), 2(p+1)/n (red)",
+       y = "Leverage", x = "Fitted values") +
+  theme_minimal()
+
+# Plot 2: Leverage vs Alcohol, highlighting extreme alcohol value
+ggplot(model_leverage, aes(x = alcohol, y = v_model_3c)) +
+  geom_point(size = 2) +
+  geom_point(data = filter(model_leverage, alcohol > 200),
+             aes(color = "alcohol > 200"), size = 3) +
+  geom_hline(yintercept = 1/n, linetype = "dashed") +
+  geom_hline(yintercept = 2 * pplus1 / n, color = "red", linetype = "dashed") +
+  labs(title = "Model 3(c): Leverage vs Alcohol Consumption",
+       caption = "Dashed lines: 1/n (black), 2(p+1)/n (red)",
+       y = "Leverage", x = "Alcohol intake (g/day)",
+       color = "Highlight") +
+  scale_color_manual(values = highlightcolors) +
+  theme_minimal()
+```
+
+The top-left plot reveals one observation with leverage well above the red line, marking it as potentially influential. When plotted against alcohol consumption, this same observation clearly stands out — it corresponds to the individual consuming over 200 grams of alcohol daily (as previously identified in chapter 3.2.2
+
+This high-leverage point is likely caused by the fact that this individual’s alcohol consumption is extremely distant from all other observations, making them an outlier in the predictor space. As leverage is determined by distance in multivariate predictor space, this makes sense.
+
+## 3.7 Influence Diagnostics: Cook’s Distance and DFBETAS for Model 3(c)
+
+To evaluate the influence of individual observations on the parameter estimates of Model 3(c), we calculate **Cook’s distance** for each observation and visualize it against the fitted values. We also compute **DFBETAS**, which measure how much each regression coefficient changes when an observation is removed.
+
+```{r}
+# Add Cook's Distance to a prediction dataframe
+model_diagnostics <- study_data |>
+  mutate(
+    yhat_model3c = predict(model_3c),
+    r_model3c = rstudent(model_3c),
+    cooksD = cooks.distance(model_3c)
+  )
+
+# Define threshold for Cook's Distance
+pplus1 <- length(coef(model_3c))
+n <- nobs(model_3c)
+cook_threshold <- qf(0.5, pplus1, model_3c$df.residual)
+
+# Plot Cook's Distance vs fitted values
+ggplot(model_diagnostics, aes(x = yhat_model3c, y = cooksD)) + 
+  geom_point(size = 2) +
+  geom_point(data = filter(model_diagnostics, alcohol > 200),
+             aes(color = "alcohol > 200"), size = 3) +
+  geom_hline(yintercept = cook_threshold, color = "purple") +
+  geom_hline(yintercept = 4/n, linetype = 2, color = "red") +
+  labs(title = "Model 3(c): Cook's Distance vs Fitted Values",
+       x = "Fitted values (log β-carotene)",
+       y = "Cook's D",
+       caption = "Dashed: 4/n (red), Solid: F(0.5, p+1, n-p-1) (purple)",
+       color = "Highlight") +
+  scale_color_manual(values = c("alcohol > 200" = "blue")) +
+  theme_minimal()
+
+# Add selected DFBETAS to diagnostics frame
+dfb <- as.data.frame(dfbetas(model_3c))
+model_diagnostics <- model_diagnostics |>
+  mutate(
+    df_intercept = dfb[["(Intercept)"]],
+    df_bmi       = dfb[["bmi"]],
+    df_chol      = dfb[["cholesterol"]]
+  )
+
+# Plot DFBETAS: Impact on Intercept
+ggplot(model_diagnostics, aes(x = yhat_model3c, y = df_intercept)) +
+  geom_point(size = 2) +
+  geom_point(data = filter(model_diagnostics, abs(r_model3c) > 3),
+             aes(color = "|r*| > 3"), size = 3) +
+  geom_point(data = filter(model_diagnostics, cooksD > 0.1),
+             aes(shape = "Cook's D > 0.1"), size = 3) +
+  geom_hline(yintercept = c(-1, 1) * sqrt(cook_threshold), color = "red") +
+  geom_hline(yintercept = c(-1, 1) * 2 / sqrt(n), color = "red", linetype = "dashed") +
+  labs(title = "DFBETAS on Intercept", x = "Fitted values", y = "DFBETAS",
+       caption = "Solid: sqrt(F-threshold), Dashed: ±2/√n") +
+  theme_minimal() +
+  scale_color_manual(values = highlightcolors)
+
+# Plot DFBETAS: Impact on Cholesterol coefficient
+ggplot(model_diagnostics, aes(x = yhat_model3c, y = df_chol)) +
+  geom_point(size = 2) +
+  geom_point(data = filter(model_diagnostics, abs(r_model3c) > 3),
+             aes(color = "|r*| > 3"), size = 3) +
+  geom_point(data = filter(model_diagnostics, cooksD > 0.1),
+             aes(shape = "Cook's D > 0.1"), size = 3) +
+  geom_hline(yintercept = c(-1, 1) * sqrt(cook_threshold), color = "red") +
+  geom_hline(yintercept = c(-1, 1) * 2 / sqrt(n), color = "red", linetype = "dashed") +
+  labs(title = "DFBETAS on Cholesterol", x = "Fitted values", y = "DFBETAS",
+       caption = "Solid: sqrt(F-threshold), Dashed: ±2/√n") +
+  theme_minimal() +
+  scale_color_manual(values = highlightcolors)
+
+# Extract predicted value for heavy drinker
+heavy_drinker <- filter(model_diagnostics, alcohol > 200)
+heavy_drinker$yhat_model3c
+```
