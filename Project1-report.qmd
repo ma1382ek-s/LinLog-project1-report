@@ -888,6 +888,10 @@ ggplot(model_diagnostics, aes(x = yhat_model3c, y = cooksD)) +
   scale_color_manual(values = c("alcohol > 200" = "blue")) +
   theme_minimal()
 
+# Identify observation with largest Cook's D
+top_cook <- model_diagnostics |> slice_max(cooksD, n = 1)
+print(top_cook)
+
 # Add selected DFBETAS to diagnostics frame
 dfb <- as.data.frame(dfbetas(model_3c))
 model_diagnostics <- model_diagnostics |>
@@ -929,3 +933,37 @@ ggplot(model_diagnostics, aes(x = yhat_model3c, y = df_chol)) +
 heavy_drinker <- filter(model_diagnostics, alcohol > 200)
 heavy_drinker$yhat_model3c
 ```
+
+```{r}
+library("tidyverse")
+
+# Ensure dfbetas are available for all parameters
+dfb_full <- as.data.frame(dfbetas(model_3c))
+
+# Add observation ID to diagnostics
+model_diagnostics <- model_diagnostics |> 
+  mutate(obs_id = row_number())
+dfb_full <- dfb_full |> 
+  mutate(obs_id = row_number())
+
+# Find the observation with the maximum Cook's distance
+max_cook_obs <- model_diagnostics |>
+  filter(cooksD == max(cooksD)) |>
+  pull(obs_id)
+
+# Extract DFBETAS for this observation
+dfb_max <- dfb_full |>
+  filter(obs_id == max_cook_obs) |>
+  select(-obs_id) |>
+  pivot_longer(cols = everything(), names_to = "term", values_to = "dfbeta")
+
+# View and rank by absolute influence
+dfb_max |> 
+  arrange(desc(abs(dfbeta)))
+```
+
+The plots show that **no observations exceed common Cook’s distance thresholds** (either 4/n or the F-distribution-based cutoff). However, the individual with extreme alcohol consumption—over 200g/day—has the **largest leverage**, but has an acceptable and average Cook's distance.
+
+When looking at **DFBETAS**, the same individual has moderate but not extreme influence on both the intercept and the cholesterol coefficient. Since the DFBETAS values do not exceed conventional thresholds (e.g., 2/√n or √F), **there is no strong reason to consider this observation an outlier or to remove it**.
+
+This indicates that although the observation has **high leverage**, it **does not exert undue influence** on the parameter estimates of the model.
