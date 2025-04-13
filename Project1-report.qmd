@@ -1009,3 +1009,182 @@ ggplot(model_diagnostics, aes(x = cholesterol, y = log(betaplasma))) +
 #largest leverage (alkohol 200 flaskor) hade ingen påverkan på våra estimates (se cooks distance graf)
 #plotta korrelationsgraf mellan betaplasma och kolesterol + betaplamsa och alkohol.
 ```
+
+## 5.1 Fine-tuning the model
+
+To determine whether it is necessary to have three categories in the categorical x-variables "vituse" and "smokstat" we look at the confidence interval for the beta-variables in model 4b. The confidence interval for the category "seldom" in "vituse" includes zero. From this result, the conclusion that "vituse" should be only two categories ("yes" and "no") is drawn. This was done with the following code:
+
+```{r}
+vituse_row <- fct_collapse(no_outlier$vituse,
+                           yes = c("seldom", "often"),
+                           no = "no")
+
+data_5a <- mutate(no_outlier,
+                  vituse = vituse_row)
+
+model5a <- lm(log(betaplasma) ~ age + sex + bmi + vituse + fiber, data = data_5a)
+```
+
+Now we present the new beta estimates confidence intervals for model 5a:
+
+|               |              |             |
+|---------------|--------------|-------------|
+|               | **2.5%**     | **97.5%**   |
+| **Intercept** | 4.629663852  | 5.57369646  |
+| **age**       | 0.003870043  | 0.01451842  |
+| **sexmale**   | -0.577195070 | -0.11476421 |
+| **bmi**       | -0.043363058 | -0.01848219 |
+| **vituseno**  | -0.462672341 | -0.14454230 |
+| **fiber**     | 0.013935129  | 0.04213240  |
+
+As we can see in the confidence intervals for the new beta estimates for the updated variables, no interval contains zero which means that all the variables included in the model has a significant effect on the outcome.
+
+## 5.2 compare the different models
+
+First we refit the models so that we can compare them:
+
+```{r}
+model1b_new <- lm(log(betaplasma) ~ bmi, data = data_5a) 
+model2b_new <- lm(log(betaplasma) ~ relevel(smokstat, "Never"), data = data_5a )
+model3c_new <- lm(log(betaplasma) ~ ., data = data_5a)
+model4b_new <- update(stepwise_bic_no_outlier, data = data_5a)
+```
+
+```{r}
+# betas
+model5a$coefficients
+
+# confint betas
+confint(model5a)
+
+# residual standard deviation
+summary(model5a)$sigma
+
+# R^2
+summary(model5a)$r.squared
+
+# adjusted R^2
+summary(model5a)$adj.r.squared
+
+# AIC and BIC
+AIC(model5a)
+BIC(model5a)
+```
+
+The code constructed calculates the beta parameters and their confidence interval, the residual standard deviations, the R\^2, the adjusted R\^2, AIC and BIC. This was done for each model as can be seen below in the tables.
+
+| Model1b       |                 |
+|---------------|-----------------|
+|               | **B-estimates** |
+| **Intercept** | 5.51229560      |
+| **bmi**       | -0.03478136     |
+
+| Model1b       |             |             |
+|---------------|-------------|-------------|
+|               | **2.5%**    | **97.5%**   |
+| **Intercept** | 5.51229560  | 6.22501439  |
+| **bmi**       | -0.04806868 | -0.02149404 |
+
+| Model2b             |                 |
+|---------------------|-----------------|
+|                     | **B-estimates** |
+| **Intercept**       | 5.0684657       |
+| **SmokstatFormer**  | -0.1273396      |
+| **SomkstatCurrent** | -0.4548275      |
+
+| Model2b             |            |             |
+|---------------------|------------|-------------|
+|                     | **2.5%**   | **97.5%**   |
+| **Intercept**       | 4.9526992  | 5.18423224  |
+| **SmokstatFormer**  | -0.3050524 | 0.05037317  |
+| **SomkstatCurrent** | -0.7038710 | -0.20578403 |
+
+| Model3c             |                 |
+|---------------------|-----------------|
+|                     | **B-estimates** |
+| **Intercept**       | -2.633487178    |
+| **age**             | -0.003918782    |
+| **sexfemale**       | -0.144794816    |
+| **bmi**             | 0.016859596     |
+| **vituseno**        | 0.116691187     |
+| **fiber**           | -0.005190135    |
+| **smokstatFormer**  | 0.046210403     |
+| **smokstatCurrent** | 0.171765012     |
+| **alcohol**         | 0.002935608     |
+| **cholesterol**     | 0.000275249     |
+| **calories**        | -0.053765699    |
+| **fat**             | 0.004027894     |
+| **betadiet**        | -0.022953666    |
+
+| Model3c             |               |              |
+|---------------------|---------------|--------------|
+|                     | **2.5%**      | **97.5%**    |
+| **Intercept**       | -50.132761310 | 44.865786955 |
+| **age**             | -0.059882427  | 0.052044862  |
+| **sexfemale**       | -2.277015806  | 1.987426173  |
+| **bmi**             | -0.272725144  | 0.306444336  |
+| **vituseno**        | -2.356978972  | 2.590361346  |
+| **fiber**           | -0.214989993  | 0.204609723  |
+| **smokstatFormer**  | -0.741571273  | 0.833992080  |
+| **smokstatCurrent** | -2.511061169  | 2.854591193  |
+| **calories**        | -0.147989055  | 0.040457656  |
+| **fat**             | -0.011378785  | 0.019434573  |
+| **alcohol**         | -0.013328786  | 0.019200003  |
+| **cholesterol**     | -0.003140803  | 0.003691302  |
+| **betadiet**        | -0.460745526  | 0.414838194  |
+
+| Model4b       |                 |
+|---------------|-----------------|
+|               | **B-estimates** |
+| **Intercept** | 4.75570051      |
+| **age**       | 0.00919423      |
+| **sexfemale** | 0.34597964      |
+| **bmi**       | -0.03092262     |
+| **vituseno**  | -0.30360732     |
+| **fiber**     | 0.02803377      |
+
+| Model4b       |              |             |
+|---------------|--------------|-------------|
+|               | **2.5%**     | **97.5%**   |
+| **Intercept** | 4.202810352  | 5.30859068  |
+| **age**       | 0.003870043  | 0.01451842  |
+| **sexfemale** | 0.114764213  | 0.57719507  |
+| **bmi**       | -0.043363058 | -0.01848219 |
+| **vituseno**  | -0.462672341 | -0.14454230 |
+| **fiber**     | 0.013935129  | 0.04213240  |
+
+| Model5a       |                 |
+|---------------|-----------------|
+|               | **B-estimates** |
+| **Intercept** | 5.10168016      |
+| **age**       | 0.00919423      |
+| **sexmale**   | -0.34597964     |
+| **bmi**       | -0.03092262     |
+| **vituseno**  | -0.30360732     |
+| **fiber**     | 0.02803377      |
+
+| Model5a       |              |             |
+|---------------|--------------|-------------|
+|               | **2.5%**     | **97.5%**   |
+| **Intercept** | 4.629663852  | 5.57369646  |
+| **age**       | 0.003870043  | 0.01451842  |
+| **sexmale**   | -0.577195070 | -0.11476421 |
+| **bmi**       | -0.043363058 | -0.01848219 |
+| **vituseno**  | -0.462672341 | -0.14454230 |
+| **fiber**     | 0.013935129  | 0.04213240  |
+
+|  |  |  |  |  |  |
+|------------|------------|------------|------------|------------|------------|
+|  | **R\^2** | **R\^2 adjusted** | **residual standard deviation** | **BIC** | **AIC** |
+| **Model 1b** | 0.07836045 | 0.07540648 | 0.7189481 | 699.1165 | 687.8683 |
+| **Model 2b** | 0.04020327 | 0.03403094 | 0.7348585 | 717.604 | 702.6064 |
+| **Model 3c** | 0.2532462 | 0.2182811 | 0.66107 | 707.7871 | 647.7968 |
+| **Model 4b** | 0.21026 | 0.1974396 | 0.6698244 | 673.6166 | 647.3708 |
+| **Model 5a** | 0.21026 | 0.1974396 | 0.6698244 | 673.6166 | 647.3708 |
+
+To determine the best model for this assignment we have to assess the tables above. Model 1b and model 2b have low R\^2 values compared to the other models, paired with high residual standard deviation. A low value for R\^2 indicates that the model does not capture the variation in the data well, which is something we don't want in our model. Both of the models also have high residual standard deviation, which means that the models predictions often are further from the observed values. This affects the fit of the model negatively. The two models also uses very few variables and not taking the other variables into account, which we have with the other three models. In model 2b there is also a possibility that the category "smokstatFormer" has no statistic significance since the confidence interval for the beta estimate includes zero.
+
+The models 1b and 2b also have large values on BIC and AIC compared to model 5a and model 4b which indicates flaws in the models' capability to fit the data. Looking at model 3c, we have quite a large value for BIC, this is an indication of the model being overly complicated. This means that the model uses more beta parameters than what is actually useful for the models ability to fit the data and increases the risk for overfitting. Model 3c has a higher value for R\^2 than both model 5a and model 4b, however because of the alarmingly high value for BIC and because of the difference between R\^2 and R\^2 adjusted we know that the model must have a number of beta parameters that have no significant influence on the model fit.
+
+Model 4b and 5a has the same amount of beta parameters, with the only difference being the variable "sexmale" and "sexfemale". Since they have the same R\^2, adjusted R\^2, residual standard deviation, BIC and AIC we know that they perform similar. The only real difference is how one could interpret the models, either from the effects on males or females.
+
